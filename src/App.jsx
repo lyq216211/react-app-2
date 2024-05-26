@@ -5,6 +5,8 @@ import Count from "./project1/Count";
 import './App.css'
 
 function App() {
+  const [count, setCount] = useState(0)
+  console.log('other log')
   return (
     <>
       <Count></Count>
