@@ -1,0 +1,19 @@
+.QRcode-form {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: space-between;
+}
+.header {
+  margin-top: 20px;
+  margin-bottom: 10px;
+}
+.QRcode-search {
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
+}
+.action-btn {
+  position: absolute;
+  right: 10px;
+}
