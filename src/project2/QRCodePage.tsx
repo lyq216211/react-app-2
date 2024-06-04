@@ -11,14 +11,20 @@ import {
   Table,
   message,
 } from "antd";
+
 import { ReloadOutlined } from "@ant-design/icons";
 import React, { useEffect, useRef, useState } from "react";
 import "./QRCodePage.css";
 import FormItem from "antd/es/form/FormItem";
 import { nanoid } from "nanoid";
 import debounce from "lodash/debounce";
+import useUpdate from "../hooks/useUpdate";
+import dayjs from "dayjs";
 
 const QRCodePage = () => {
+  const [state, update] = useUpdate();
+  const [isCreate, setIsCreate] = useState(true);
+  const [updateItemId, setUpdateItemId] = useState(0);
   const columns = [
     {
       title: "名称",
@@ -45,7 +51,19 @@ const QRCodePage = () => {
       key: "name",
       render: (_, record) => (
         <Space size="middle">
-          <a>编辑</a>
+          <a
+            onClick={() => {
+              setIsModalOpen(true);
+              setIsCreate(false);
+              setUpdateItemId(record.id);
+              createForm.setFieldsValue({
+                ...record,
+                date: dayjs(record.date),
+              });
+            }}
+          >
+            编辑
+          </a>
           <a>查看</a>
           <a>下载</a>
           <a onClick={() => deleteItem(record.id)}>删除</a>
@@ -53,34 +71,48 @@ const QRCodePage = () => {
       ),
     },
   ];
-  const [form] = Form.useForm();
+  const [searchForm] = Form.useForm();
+  const [createForm] = Form.useForm();
   const [data, setData] = useState([]);
   const { RangePicker } = DatePicker;
   const [messageApi, contextHolder] = message.useMessage();
 
   const [loading, setLoding] = useState(false);
-  const [inputValue, setInputValue] = useState("");
   const [confirmLoading, setConfirmLoading] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
-  const refresh = async () => {
-    console.log("ipval", inputValue);
-    // setInputValue("");
-    await fetchUrl("/api/v1/books", inputValue);
+  const refresh = () => {
+    fetchUrl("/api/v1/books");
   };
   const fetchUrl = async (url, params = "") => {
     setLoding(true);
     const res = await fetch(url + "/" + params);
     const data = await res.json();
     setData(data);
-    // console.log("data   ", data);
-
     setLoding(false);
   };
   const handleOk = async () => {
-    const formdata = await form?.validateFields();
-    // console.log(formdata);
+    const formdata = await createForm?.validateFields();
     setConfirmLoading(true);
+    if (isCreate) {
+      createItem(formdata);
+    } else {
+      updateItem(formdata);
+    }
+    createForm?.resetFields();
+    setConfirmLoading(false);
+    setIsModalOpen(false);
+    refresh();
+    messageApi.open({
+      type: "success",
+      content: `${isCreate ? "新建" : "修改"}成功`,
+    });
+  };
+  const handleCancel = () => {
+    setIsModalOpen(false);
+    createForm?.resetFields();
+  };
+  const createItem = async (formdata) => {
     await fetch("/api/v1/books", {
       method: "POST",
       headers: {
@@ -88,17 +120,6 @@ const QRCodePage = () => {
       },
       body: JSON.stringify({ ...formdata, id: nanoid() }),
     });
-    form?.resetFields();
-    setConfirmLoading(false);
-    setIsModalOpen(false);
-    refresh();
-    messageApi.open({
-      type: "success",
-      content: "新建成功",
-    });
-  };
-  const handleCancel = () => {
-    setIsModalOpen(false);
   };
   const deleteItem = async (id) => {
     setLoding(true);
@@ -116,12 +137,22 @@ const QRCodePage = () => {
       content: "删除成功",
     });
   };
+  const updateItem = async (formdata) => {
+    await fetch(`/api/v1/books/${updateItemId}`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json;charset=utf-8",
+      },
+      body: JSON.stringify(formdata),
+    });
+  };
   const searchItem = async (id) => {
     await fetchUrl("/api/v1/books", id);
   };
+
   useEffect(() => {
-    fetchUrl("/api/v1/books");
-  }, []);
+    fetchUrl("/api/v1/books", searchForm.getFieldValue("input"));
+  }, [state]);
 
   return (
     <div>
@@ -139,6 +170,7 @@ const QRCodePage = () => {
             maxWidth: 600,
           }}
           className="QRcode-form"
+          form={searchForm}
           onValuesChange={debounce((changedValues, allValues) => {
             const id = changedValues.input;
             searchItem(id);
@@ -159,14 +191,17 @@ const QRCodePage = () => {
             <Flex gap="small" wrap="nowrap">
               {contextHolder}
               <Button size={"large"}>导出</Button>
-              <Button size={"large"} onClick={refresh}>
+              <Button size={"large"} onClick={update}>
                 刷新
                 <ReloadOutlined />
               </Button>
               <Button
                 type="primary"
                 size={"large"}
-                onClick={() => setIsModalOpen(true)}
+                onClick={() => {
+                  setIsModalOpen(true);
+                  setIsCreate(true);
+                }}
               >
                 新建
               </Button>
@@ -174,33 +209,70 @@ const QRCodePage = () => {
           </Form.Item>
         </Form>
         <Modal
-          title="新建二维码"
+          title={`${isCreate ? "新建" : "修改"}二维码`}
           open={isModalOpen}
           onOk={handleOk}
           confirmLoading={confirmLoading}
           onCancel={handleCancel}
-          okText="新建"
+          okText="确认"
           cancelText="取消"
         >
           <Form
-            form={form}
             labelCol={{
               span: 6,
             }}
             wrapperCol={{
               span: 16,
             }}
+            form={createForm}
+            name="modal-form"
           >
-            <FormItem label="名称" name="name">
+            <FormItem
+              label="名称"
+              name="name"
+              rules={[
+                {
+                  required: true,
+                  message: "Please input your username!",
+                },
+              ]}
+            >
               <Input></Input>
             </FormItem>
-            <FormItem label="二维码链接" name="link">
+            <FormItem
+              label="二维码链接"
+              name="link"
+              rules={[
+                {
+                  required: true,
+                  message: "Please input your link",
+                },
+              ]}
+            >
               <Input></Input>
             </FormItem>
-            <FormItem label="创建日期" name="date">
+            <FormItem
+              label="创建日期"
+              name="date"
+              rules={[
+                {
+                  required: true,
+                  message: "Please input your date!",
+                },
+              ]}
+            >
               <DatePicker />
             </FormItem>
-            <FormItem label="扫码次数" name="count">
+            <FormItem
+              label="扫码次数"
+              name="count"
+              rules={[
+                {
+                  required: true,
+                  message: "Please input your count!",
+                },
+              ]}
+            >
               <Input></Input>
             </FormItem>
           </Form>
